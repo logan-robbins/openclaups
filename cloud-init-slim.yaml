@@ -16,6 +16,7 @@ write_files:
       TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
       TELEGRAM_USER_ID=${TELEGRAM_USER_ID}
       VM_PASSWORD=${VM_PASSWORD}
+      TAILSCALE_AUTHKEY=${TAILSCALE_AUTHKEY}
 
 runcmd:
   - chown -R azureuser:azureuser /home/azureuser

@@ -277,6 +277,8 @@ write_files:
       Environment=HOME=/home/azureuser
       Environment=DISPLAY=:0
       Environment=XAUTHORITY=/home/azureuser/.Xauthority
+      Environment=NODE_COMPILE_CACHE=/var/tmp/openclaw-compile-cache
+      Environment=OPENCLAW_NO_RESPAWN=1
       EnvironmentFile=/home/azureuser/.env
       ExecStartPre=/bin/bash -c 'until [ -S /tmp/.X11-unix/X0 ]; do sleep 1; done'
       ExecStart=/usr/bin/openclaw gateway
@@ -325,7 +327,7 @@ runcmd:
     chmod 600 /etc/x11vnc.pass
 
   # ---- Node.js 24 + OpenClaw --------------------------------------------------
-  # The system nodejs 18.x may get pulled in as a dependency (node-acorn →
+  # The system nodejs 18.x may get pulled in as a dependency (node-acorn ->
   # libnode109 chain). Purge it first so the nodesource 24.x install takes hold
   # and provides npm.
   - |
@@ -333,6 +335,10 @@ runcmd:
     curl -fsSL https://deb.nodesource.com/setup_24.x | bash -
     DEBIAN_FRONTEND=noninteractive apt-get install -y nodejs
     npm install -g openclaw@latest
+
+  # ---- Tailscale (remote gateway access via Serve/Funnel) ---------------------
+  - |
+    curl -fsSL https://tailscale.com/install.sh | sh
 
   # ---- Google Chrome .deb (per 2026 OpenClaw Linux troubleshooting docs) ------
   # snap Chromium is explicitly broken for OpenClaw's CDP integration because
@@ -343,6 +349,9 @@ runcmd:
 
   # ---- Claude Code CLI ---------------------------------------------------------
   - npm install -g @anthropic-ai/claude-code
+
+  # ---- Node compile cache (openclaw doctor recommendation) --------------------
+  - mkdir -p /var/tmp/openclaw-compile-cache
 
   # ---- /opt/claw directory (boot scripts staged here by deploy.sh via SCP) ----
   - mkdir -p /opt/claw/defaults /opt/claw/updates

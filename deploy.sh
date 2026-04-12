@@ -152,7 +152,7 @@ ensure_password() {
 
 # --- .env loader + validation -------------------------------------------------
 REQUIRED_ENV_VARS=(XAI_API_KEY TELEGRAM_BOT_TOKEN)
-OPTIONAL_ENV_VARS=(OPENAI_API_KEY BRIGHTDATA_API_TOKEN TELEGRAM_USER_ID)
+OPTIONAL_ENV_VARS=(OPENAI_API_KEY BRIGHTDATA_API_TOKEN TELEGRAM_USER_ID TAILSCALE_AUTHKEY)
 
 load_env() {
     if [[ ! -f "$ENV_FILE" ]]; then
@@ -219,6 +219,7 @@ render_cloud_init() {
         ${TELEGRAM_ALLOW_FROM}
         ${SOUL_MD_BASE64}
         ${VM_PASSWORD}
+        ${TAILSCALE_AUTHKEY}
     ' < "$template" > "$rendered"
     echo "$rendered"
 }

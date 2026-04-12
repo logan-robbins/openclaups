@@ -200,6 +200,9 @@ setup_symlinks() {
     echo "xfce4-session" > "${HOME_DIR}/.xsession"
     chmod 644 "${HOME_DIR}/.xsession"
 
+    # Ensure node compile cache exists (openclaw doctor recommendation)
+    mkdir -p /var/tmp/openclaw-compile-cache
+
     log "Symlinks and .xsession created"
 }
 
@@ -223,6 +226,22 @@ sync_vnc_password() {
         x11vnc -storepasswd "$pass" /etc/x11vnc.pass 2>/dev/null
         chmod 600 /etc/x11vnc.pass
         log "Synced VNC password from data disk"
+    fi
+}
+
+setup_tailscale() {
+    local env_file="${DATA_MOUNT}/openclaw/.env"
+    local ts_key=""
+    ts_key=$(grep -E '^TAILSCALE_AUTHKEY=' "$env_file" 2>/dev/null | cut -d= -f2- | xargs) || true
+
+    if [[ -n "$ts_key" ]] && command -v tailscale >/dev/null 2>&1; then
+        if ! tailscale status &>/dev/null; then
+            log "Joining tailnet..."
+            tailscale up --authkey "$ts_key" --hostname "$(hostname)" --accept-routes 2>/dev/null || true
+            log "Tailscale joined"
+        else
+            log "Tailscale already connected"
+        fi
     fi
 }
 
@@ -273,6 +292,7 @@ seed_new_disk
 setup_symlinks
 fix_permissions
 sync_vnc_password
+setup_tailscale
 run_updates
 start_services
 log "=== Boot script complete ==="

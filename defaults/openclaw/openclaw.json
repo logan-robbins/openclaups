@@ -52,7 +52,10 @@
   "gateway": {
     "port": 18789,
     "mode": "local",
-    "bind": "loopback"
+    "bind": "loopback",
+    "tailscale": {
+      "mode": "off"
+    }
   },
 
   "tools": {
@@ -72,7 +75,8 @@
     "enabled": true,
     "executablePath": "/usr/bin/google-chrome-stable",
     "headless": false,
-    "noSandbox": true
+    "noSandbox": true,
+    "cdpPort": 18800
   },
 
   "logging": {

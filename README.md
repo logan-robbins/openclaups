@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="openclawps.png" alt="OpenClawps" width="400">
+  <img src="openclawps.png" alt="OpenClawps" width="700">
 </p>
 
 # OpenClawps

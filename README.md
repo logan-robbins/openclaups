@@ -1,15 +1,22 @@
 # OpenClawps
 
-Ops for [OpenClaw](https://openclaw.ai) agents. Deploy, version, and roll out updates to autonomous claws on Azure while preserving agent identity, workspace, and state.
+Ops for [OpenClaw](https://openclaw.ai) agents. One command to deploy a fully equipped, desktop-running claw on Azure. One command to upgrade it without losing state.
 
-Each claw is an always-on VM with a full graphical desktop, OpenClaw gateway, Telegram bot, Chrome, and Claude Code. The desktop is the point -- as computer-use capabilities ship across model providers, claws should be running on a real desktop with a real browser, continuously exercising those capabilities in the environment they're designed for.
+OpenClaw gives you the AI brain and the Gateway. OpenClawps gives you the easy button to run that brain as a reliable, desktop-equipped cloud agent.
 
-The default run mode is deliberately permissive: sandbox off, full exec, passwordless sudo. The agent operates like a human at the keyboard. Containment lives at the infrastructure boundary, not inside the guest. More restrictive run modes are a natural next contribution.
+## What this adds to OpenClaw
+
+- **One-command Azure deploy** -- `deploy.sh scratch` goes from zero to a working agent with Telegram, Chrome, and Claude Code in ~10 min. No manual VM setup.
+- **Full graphical desktop** -- Real xfce4 desktop on `:0` with Chrome and VNC. Computer-use agents need a real browser and a real screen, not a headless shell.
+- **Image-based versioning** -- Bake the system into immutable images. Stamp out claws in ~2 min. Agent state lives on a separate data disk that survives image swaps.
+- **Stateful upgrades** -- Swap the VM underneath without losing identity, workspace, memory, or credentials. Migration scripts run automatically.
+- **Fleet-friendly** -- Same image, different `.env`, different claw. Each gets its own Telegram bot, API keys, and workspace.
+- **33-point health checks** -- `verify.sh` runs after every deploy and upgrade. Catches misconfigs before they become mystery failures.
 
 ## Quick start
 
 ```bash
-cp .env.template .env && vi .env    # API keys + Telegram bot token
+cp .env.template .env && vi .env    # model, API keys, Telegram bot token
 ./deploy.sh scratch                  # full install from stock Ubuntu, ~10 min
 ```
 
@@ -23,21 +30,22 @@ ENV_FILE=.env.alice VM_NAME=alice ./deploy.sh    # stamp out a claw, ~2 min
 ./deploy.sh upgrade alice --image 2.0.0          # swap image, keep state
 ```
 
-**Image** = versioned system runtime (OS, packages, OpenClaw, Chrome, Claude Code, boot logic). **Data disk** = durable agent state (config, secrets, workspace, memory). Update the image, swap the VM, the agent picks up where it left off. Migration scripts in `updates/` run automatically on upgrade.
+**Image** = versioned system runtime (OS, packages, OpenClaw, Chrome, Claude Code, boot logic). **Data disk** = durable agent state (config, secrets, workspace, memory). Migration scripts in `updates/` run automatically on upgrade.
 
-## Credentials
+## Configuration
 
 Each claw gets its own `.env`:
 
 | Key | Required | Notes |
 |---|---|---|
 | `TELEGRAM_BOT_TOKEN` | yes | Unique per claw -- one bot per token |
-| `OPENCLAW_MODEL` | no | Model to use, e.g. `xai/grok-4`, `openai/gpt-4o`, `anthropic/claude-4`. Default: `xai/grok-4` |
+| `OPENCLAW_MODEL` | no | `xai/grok-4`, `openai/gpt-4o`, `anthropic/claude-4`, etc. Default: `xai/grok-4` |
 | `XAI_API_KEY` | * | Required if using xai/* models |
 | `OPENAI_API_KEY` | * | Required if using openai/* models |
 | `ANTHROPIC_API_KEY` | * | Required if using anthropic/* models |
 | `BRIGHTDATA_API_TOKEN` | no | Web research |
 | `TELEGRAM_USER_ID` | no | Restricts who can DM the bot |
+| `TAILSCALE_AUTHKEY` | no | Auto-joins your tailnet for remote gateway access |
 | `VM_PASSWORD` | no | Auto-generated if blank. Same password for SSH and VNC. |
 
 ## Prerequisites
@@ -60,13 +68,9 @@ az vm deallocate -g rg-linux-desktop -n alice   # stop billing
 az vm start      -g rg-linux-desktop -n alice   # resume, services auto-start
 ```
 
-## Verification
+## Security
 
-`deploy.sh` runs a health check after every deploy and upgrade. Run it manually:
-
-```bash
-ssh azureuser@<ip> 'sudo /opt/claw/verify.sh'
-```
+Deliberately permissive inside the VM: sandbox off, full exec, passwordless sudo. The agent operates like a human at the keyboard. Containment lives at the infrastructure boundary (isolated resource group, scoped credentials), not inside the guest.
 
 ## Contributing
 

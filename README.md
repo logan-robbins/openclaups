@@ -12,8 +12,8 @@ OpenClaw gives you the AI brain and the Gateway. OpenClawps gives you the easy b
 
 - **One-command Azure deploy** -- `deploy.sh scratch` goes from zero to a working agent with Telegram, Chrome, and Claude Code in ~10 min. No manual VM setup.
 - **Full graphical desktop** -- Real xfce4 desktop on `:0` with Chrome and VNC. Computer-use agents need a real browser and a real screen, not a headless shell.
-- **Image-based versioning** -- Bake the system into immutable images. Stamp out claws in ~2 min. Agent state lives on a separate data disk that survives image swaps.
-- **Stateful upgrades** -- Swap the VM underneath without losing identity, workspace, memory, or credentials. Migration scripts run automatically.
+- **Two-layer separation** -- The system (OS, packages, OpenClaw, boot logic) and the claw (identity, workspace, memory, credentials) are on separate disks. The system layer is an immutable, versioned image. The claw layer is a portable data disk you can detach, reattach to a different VM, or move to a new image version. The claw is not the VM -- it rides on top of it.
+- **Stateful upgrades** -- Delete the old VM, create a new one from a new image, reattach the same data disk. The claw picks up where it left off. Migration scripts run automatically.
 - **Fleet-friendly** -- Same image, different `.env`, different claw. Each gets its own Telegram bot, API keys, and workspace.
 - **33-point health checks** -- `verify.sh` runs after every deploy and upgrade. Catches misconfigs before they become mystery failures.
 

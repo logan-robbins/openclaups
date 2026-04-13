@@ -4,9 +4,12 @@
 .vm-state
 node_modules/
 .state/
+.logs/
 dist/
 .terraform/
 *.tfstate
 *.tfstate.*
+*.tfbackend
+secrets.auto.tfvars
 *.swp
 *.edited.md

@@ -1,0 +1,36 @@
+environment:
+  name: dev
+  location: eastus
+  resource_group_name: rg-linux-desktop
+  virtual_network_name: rg-linux-desktop-vnet
+  subnet_name: default
+  network_security_group_name: rg-linux-desktop-nsg
+  address_space:
+    - 10.0.0.0/16
+  subnet_prefixes:
+    - 10.0.0.0/24
+  gallery_name: clawGallery
+  image_definition_name: claw-base
+  image_identifier:
+    publisher: claw
+    offer: claw-vm
+    sku: base
+  hyper_v_generation: V2
+  trusted_launch_enabled: true
+  tags:
+    managed-by: terraform
+    project: openclawps
+    environment: dev
+
+defaults:
+  admin_username: azureuser
+  vm_size: Standard_D2s_v3
+  data_disk_size_gb: 32
+  data_disk_sku: Standard_LRS
+  image_version: "1.0.0"
+  model: xai/grok-4.20-0309-reasoning
+  telegram_user_id: ""
+  enable_trusted_launch: true
+
+claws:
+  linux-desktop: {}

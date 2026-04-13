@@ -47,7 +47,20 @@ check ".env exists on data disk" test -f /mnt/claw-data/openclaw/.env
 
 # Verify required env vars are non-empty
 env_file="/mnt/claw-data/openclaw/.env"
-for var in XAI_API_KEY TELEGRAM_BOT_TOKEN; do
+# At least one provider API key must be set
+provider_key_found=false
+for var in XAI_API_KEY OPENAI_API_KEY ANTHROPIC_API_KEY MOONSHOT_API_KEY DEEPSEEK_API_KEY; do
+    val=$(grep "^${var}=" "$env_file" 2>/dev/null | cut -d= -f2-)
+    if [[ -n "$val" && "$val" != *"your-"*"-here"* ]]; then
+        pass "$var is set"
+        provider_key_found=true
+    fi
+done
+if [[ "$provider_key_found" != "true" ]]; then
+    fail "No provider API key set (need at least one of XAI/OPENAI/ANTHROPIC/MOONSHOT/DEEPSEEK)"
+fi
+
+for var in TELEGRAM_BOT_TOKEN; do
     val=$(grep "^${var}=" "$env_file" 2>/dev/null | cut -d= -f2-)
     if [[ -n "$val" && "$val" != *"your-"*"-here"* ]]; then
         pass "$var is set"

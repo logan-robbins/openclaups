@@ -227,11 +227,15 @@ Each claw gets its own `.env`:
 
 | Key | Required | Notes |
 |---|---|---|
+At least one provider API key must be present for a claw to pass runtime verification.
+
 | `TELEGRAM_BOT_TOKEN` | yes | Unique per claw -- one bot per token |
-| `OPENCLAW_MODEL` | no | `xai/grok-4`, `openai/gpt-4o`, `anthropic/claude-4`, etc. Default: `xai/grok-4` |
+| `OPENCLAW_MODEL` | no | `xai/grok-4`, `openai/gpt-4o`, `anthropic/claude-4`, `moonshot/kimi-k2.5`, `deepseek/deepseek-chat`, etc. Default: `xai/grok-4` |
 | `XAI_API_KEY` | * | Required if using xai/* models |
 | `OPENAI_API_KEY` | * | Required if using openai/* models |
 | `ANTHROPIC_API_KEY` | * | Required if using anthropic/* models |
+| `MOONSHOT_API_KEY` | * | Required if using moonshot/* models |
+| `DEEPSEEK_API_KEY` | * | Required if using deepseek/* models |
 | `BRIGHTDATA_API_TOKEN` | no | Web research |
 | `TELEGRAM_USER_ID` | no | Restricts who can DM the bot |
 | `TAILSCALE_AUTHKEY` | no | Auto-joins your tailnet for remote gateway access |

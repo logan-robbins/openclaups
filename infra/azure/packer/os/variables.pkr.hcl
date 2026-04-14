@@ -21,15 +21,15 @@ variable "gallery_name" {
   description = "Azure Compute Gallery name."
 }
 
-variable "image_name" {
-  type        = string
-  default     = "claw-base"
-  description = "Image definition name inside the gallery."
-}
-
 variable "image_version" {
   type        = string
-  description = "Semantic version for the gallery image (e.g. 4.0.0)."
+  description = "Semantic version for the claw-os image (e.g. 4.0.0)."
+}
+
+variable "base_image_version" {
+  type        = string
+  default     = "1.0.0"
+  description = "Version of the claw-desktop image to build on top of."
 }
 
 variable "vm_size" {

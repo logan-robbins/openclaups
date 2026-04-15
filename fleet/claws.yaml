@@ -25,7 +25,7 @@ defaults:
   vm_size: Standard_D2s_v3
   data_disk_size_gb: 32
   data_disk_sku: Standard_LRS
-  image_version: "1.0.0"
+  image_version: "4.0.0"
   model: xai/grok-4.20-0309-reasoning
   telegram_user_id: ""
   enable_trusted_launch: true

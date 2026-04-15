@@ -9,6 +9,7 @@
       "sandbox": {
         "mode": "off"
       },
+      "skills": ["/mnt/claw-data/workspace/skills"],
       "elevatedDefault": "full",
       "thinkingDefault": "high",
       "subagents": {

@@ -181,6 +181,10 @@ terraform apply -var-file=terraform.tfvars
 
 6. **Verify** by SSHing in and running `/opt/claw/verify.sh` (36-point health check), or message the Telegram bot.
 
+7. **Post-deploy setup** (manual, one-time per claw):
+   - **Gmail/Google Workspace**: OAuth flow via `gog` CLI. See [docs/GMAIL.md](docs/GMAIL.md) for the full procedure — this is a multi-step remote OAuth process that cannot be automated.
+   - **GitHub**: `gh auth login --with-token` with a PAT, add SSH key via `gh ssh-key add`
+
 Terraform creates per claw: public IP, NIC, NSG association, VM (from gallery image), data disk, disk attachment, and a random password. The data disk has `prevent_destroy` -- Terraform will refuse to delete claw state.
 
 **To upgrade a claw**: change `image_version` in `claws.yaml` and `terraform apply`. Terraform destroys the VM and recreates it from the new image. The data disk survives. boot.sh re-mounts it and runs any pending update scripts.

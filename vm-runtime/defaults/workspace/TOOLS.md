@@ -52,6 +52,16 @@ This file documents what is specific to this claw VM. Skills define how tools wo
 - **Screenshot test:** `curl -s -X POST http://localhost:9090/execute -d '{"action":"screenshot","scale":0.5}' | jq '.result.image' | wc -c`
 - **Phone status:** check relay health endpoint — `phone_connected: true` means the phone's WS is live
 
+## Skills (workspace/skills/)
+
+- **mcporter** — MCP server porter, configure and manage MCP servers
+- **github** — GitHub CLI integration (issues, PRs, repos)
+- **tmux** — tmux session management
+- **model-usage** — track and report model token usage
+- **gog** — Google search via CLI
+- **caldav-calendar** — CalDAV calendar integration (read/write events)
+- **deep-research** — rigorous multi-source web research with progress tracking
+
 ---
 
 Add whatever helps you do your job. This is your cheat sheet.

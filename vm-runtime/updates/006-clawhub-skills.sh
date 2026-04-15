@@ -11,5 +11,7 @@ sudo -u azureuser npx clawhub install mcporter 2>/dev/null || true
 sudo -u azureuser npx clawhub install github 2>/dev/null || true
 sudo -u azureuser npx clawhub install tmux 2>/dev/null || true
 sudo -u azureuser npx clawhub install model-usage 2>/dev/null || true
+sudo -u azureuser npx clawhub install gog 2>/dev/null || true
+sudo -u azureuser npx clawhub install caldav-calendar 2>/dev/null || true
 
-echo "[update-006] Installed clawhub skills: mcporter, github, tmux, model-usage"
+echo "[update-006] Installed clawhub skills: mcporter, github, tmux, model-usage, gog, caldav-calendar"

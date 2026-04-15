@@ -22,7 +22,7 @@ azure:
 
 defaults:
   admin_username: azureuser
-  vm_size: Standard_D2s_v3
+  vm_size: Standard_D4s_v3
   data_disk_size_gb: 32
   data_disk_sku: Standard_LRS
   image_version: "4.0.0"

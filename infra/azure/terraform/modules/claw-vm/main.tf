@@ -11,6 +11,7 @@ locals {
     TELEGRAM_USER_ID     = var.telegram_user_id
     VM_PASSWORD          = var.admin_password
     TAILSCALE_AUTHKEY    = var.tailscale_authkey
+    RELAY_TOKEN          = var.relay_token
   })
 }
 

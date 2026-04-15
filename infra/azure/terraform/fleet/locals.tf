@@ -13,6 +13,7 @@ locals {
     deepseek_api_key     = ""
     brightdata_api_token = ""
     tailscale_authkey    = ""
+    relay_token          = ""
   }
 
   claws = {

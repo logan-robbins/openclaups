@@ -67,6 +67,7 @@ module "claw_vm" {
   deepseek_api_key         = each.value.secrets.deepseek_api_key
   brightdata_api_token     = each.value.secrets.brightdata_api_token
   tailscale_authkey        = each.value.secrets.tailscale_authkey
+  relay_token              = try(each.value.secrets.relay_token, "")
   admin_ssh_public_key     = var.admin_ssh_public_key
   enable_trusted_launch    = try(each.value.enable_trusted_launch, true)
   tags                     = merge(local.shared_tags, try(each.value.tags, {}), { claw = each.key })

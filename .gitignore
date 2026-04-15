@@ -13,3 +13,4 @@ dist/
 secrets.auto.tfvars
 *.swp
 *.edited.md
+infra/azure/terraform/fleet/backend_override.tf

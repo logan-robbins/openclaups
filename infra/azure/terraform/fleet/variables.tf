@@ -26,6 +26,7 @@ variable "claw_secrets" {
     deepseek_api_key     = optional(string, "")
     brightdata_api_token = optional(string, "")
     tailscale_authkey    = optional(string, "")
+    relay_token          = optional(string, "")
   }))
   sensitive = true
   default   = {}

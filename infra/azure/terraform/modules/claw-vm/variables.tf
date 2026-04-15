@@ -103,6 +103,12 @@ variable "tailscale_authkey" {
   default   = ""
 }
 
+variable "relay_token" {
+  type      = string
+  sensitive = true
+  default   = ""
+}
+
 variable "admin_ssh_public_key" {
   type        = string
   description = "SSH public key for key-based authentication. If set, added alongside password auth."

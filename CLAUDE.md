@@ -26,7 +26,7 @@ Every VM start runs `/opt/claw/boot.sh` (staged from `vm-runtime/lifecycle/boot.
 5. `run-updates.sh` applies any `vm-runtime/updates/NNN-*.sh` script whose number exceeds `/mnt/claw-data/update-version.txt`, then advances the marker.
 6. Start services (lightdm, x11vnc, gateway, Claude Code).
 
-**Adding a migration**: create `vm-runtime/updates/NNN-short-name.sh` with the next number. Must be idempotent (boot.sh may rerun it in rare retry paths) and safe on both fresh and long-lived disks — users on every prior version will eventually run it.
+**Adding a migration**: create `vm-runtime/updates/NNN-short-name.sh` with the next number. Must be idempotent (boot.sh may rerun it in rare retry paths) and safe on both fresh and long-lived disks — users on every prior version will eventually run it. Scripts run as **root** under `run-updates.sh`; use `sudo -u azureuser` for user-scoped tooling (e.g. `openclaw` CLI) and `chown azureuser:azureuser` on any files you create under the user's home or on the data disk.
 
 ## Common commands
 
@@ -108,3 +108,6 @@ npm run build
 - **Packer mirrors scratch cloud-init**: the numbered `infra/azure/packer/scripts/` steps exist to produce the same end state as `vm-runtime/cloud-init/scratch.yaml`. Changes to one usually need a matching change in the other.
 - **`fleet/claws.yaml` is the single source of truth for fleet membership** — both Terraform roots read it, and CI deploys from it. Adding a claw = one YAML entry + one secrets entry.
 - **Permissive inside the VM is intentional**: passwordless sudo, no exec sandbox. Containment is at the Azure boundary (scoped RG, NSG, credentials). Do not add guest-side hardening without an explicit request — it will break the agent.
+- **Per-VM fields never go in `vm-runtime/defaults/`**: when propagating live `openclaw.json` back to defaults, strip `gateway.auth.token`, every `mcp.servers.*.env.*` token, `exec-approvals.socket.token`, the runtime-written `meta` / `wizard` / `plugins.installs.*` blocks, and per-entry `id` UUIDs on approval lists. MCP servers that need a token should be written at runtime from the per-claw `.env` in a numbered update script — `vm-runtime/updates/005-brightdata-mcp.sh` is the template.
+- **Persist home-dir files via the data disk + a symlink**: anything under `/home/azureuser/` lives on the OS disk and is lost on image upgrade. Put the canonical copy under `/mnt/claw-data/workspace/` (reachable through the existing `~/workspace` bind mount) and create the symlink from `~/` in a numbered update script. `vm-runtime/updates/011-home-claude-md-symlink.sh` shows the idempotent fresh / existing / already-linked / divergent-copy handling.
+- **`openclaw.json` is lenient at runtime**: trailing commas and `//` line comments are tolerated. Strict JSON tooling (Python's `json`, `jq`, etc.) must preprocess — the live fleet config has trailing commas that a strict parser will reject.

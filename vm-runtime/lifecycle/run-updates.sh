@@ -38,7 +38,9 @@ for script in "$UPDATES_DIR"/[0-9][0-9][0-9]-*.sh; do
         if bash "$script"; then
             echo "$script_version" > "$VERSION_FILE"
             log "Update ${basename_script} completed -- version now ${script_version}"
-            (( pending++ ))
+            # Pre-increment: (( pending++ )) returns exit 1 when pending is 0,
+            # which under `set -e` aborts the loop after the first update.
+            pending=$((pending + 1))
         else
             log "ERROR: Update ${basename_script} failed -- stopping"
             exit 1

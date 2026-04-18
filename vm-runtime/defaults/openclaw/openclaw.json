@@ -5,7 +5,7 @@
         "primary": "anthropic/claude-sonnet-4-6"
       },
       "workspace": "/mnt/claw-data/workspace",
-      "maxConcurrent": 4,
+      "maxConcurrent": 32,
       "sandbox": {
         "mode": "off"
       },
@@ -22,11 +22,12 @@
         "every": "30m"
       },
       "subagents": {
-        "allowAgents": [
-          "*"
-        ],
-        "maxSpawnDepth": 1,
-        "maxChildrenPerAgent": 10
+        "allowAgents": ["*"],
+        "maxSpawnDepth": 5,
+        "maxChildrenPerAgent": 20,
+        "maxConcurrent": 32,
+        "runTimeoutSeconds": 0,
+        "requireAgentId": false
       },
       "models": {
         "anthropic/claude-opus-4-6": {
@@ -58,9 +59,7 @@
             "id": "grok-4",
             "name": "Grok 4",
             "reasoning": false,
-            "input": [
-              "text"
-            ],
+            "input": ["text"],
             "contextWindow": 200000,
             "maxTokens": 8192
           }
@@ -74,10 +73,7 @@
             "id": "claude-opus-4-6",
             "name": "Claude Opus 4.6",
             "reasoning": true,
-            "input": [
-              "text",
-              "image"
-            ],
+            "input": ["text", "image"],
             "contextWindow": 1000000,
             "maxTokens": 32000
           },
@@ -85,10 +81,7 @@
             "id": "claude-sonnet-4-6",
             "name": "Claude Sonnet 4.6",
             "reasoning": true,
-            "input": [
-              "text",
-              "image"
-            ],
+            "input": ["text", "image"],
             "contextWindow": 1000000,
             "maxTokens": 32000
           }
@@ -100,10 +93,8 @@
     "telegram": {
       "enabled": true,
       "dmPolicy": "open",
-      "allowFrom": [
-        "*"
-      ],
-      "groupPolicy": "disabled",
+      "allowFrom": ["*"],
+      "groupPolicy": "open",
       "streaming": {
         "mode": "partial"
       }
@@ -112,17 +103,39 @@
   "gateway": {
     "port": 18789,
     "mode": "local",
-    "bind": "loopback",
+    "bind": "lan",
     "auth": {
-      "mode": "token"
+      "mode": "none"
+    },
+    "controlUi": {
+      "allowInsecureAuth": true,
+      "dangerouslyDisableDeviceAuth": true,
+      "dangerouslyAllowHostHeaderOriginFallback": true,
+      "allowedOrigins": ["*"]
     }
   },
   "tools": {
+    "profile": "full",
+    "fs": {
+      "workspaceOnly": false
+    },
     "exec": {
       "security": "full",
       "ask": "off",
+      "host": "gateway",
+      "autoAllowSkills": true,
       "backgroundMs": 10000,
-      "timeoutSec": 1800
+      "timeoutSec": 1800,
+      "applyPatch": {
+        "workspaceOnly": false
+      }
+    },
+    "elevated": {
+      "enabled": true,
+      "allowFrom": ["*"]
+    },
+    "sessions": {
+      "visibility": "all"
     },
     "web": {
       "search": {
@@ -149,10 +162,16 @@
     "enabled": true,
     "executablePath": "/usr/bin/google-chrome-stable",
     "headless": false,
-    "noSandbox": true
+    "noSandbox": true,
+    "ssrfPolicy": {
+      "dangerouslyAllowPrivateNetwork": true
+    }
   },
   "logging": {
-    "redactSensitive": "tools"
+    "redactSensitive": "off"
+  },
+  "commands": {
+    "useAccessGroups": false
   },
   "plugins": {
     "entries": {
@@ -170,6 +189,12 @@
       },
       "lossless-claw": {
         "enabled": true
+      },
+      "acpx": {
+        "enabled": true,
+        "config": {
+          "permissionMode": "approve-all"
+        }
       }
     },
     "allow": [

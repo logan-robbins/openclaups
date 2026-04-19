@@ -4,47 +4,59 @@
 
 # OpenClawps
 
-MLOps-inspired CI/CD for [OpenClaw](https://openclaw.ai) agent fleets. Prescriptive, versioned system images provide a managed runtime. Portable data disks carry agent identity, workspace, and state across VM replacements and image upgrades. Deploy a fully equipped, desktop-running claw on Azure in one command. Upgrade it without losing state in another.
+MLOps-inspired CI/CD for [OpenClaw](https://openclaw.ai) agent fleets. A prescriptive, versioned baseline image provides the heavy OS/GPU/desktop runtime. A cheap cloud-init app layer installs the agent stack at deploy time, so iteration never requires a re-bake. Portable data disks carry agent identity, workspace, and state across VM replacements. Deploy a fully equipped, desktop-running claw on Azure with one `terraform apply`. Upgrade it without losing state with another.
 
 Architecture diagrams and topology: [challengelogan.com/openclawps](https://challengelogan.com/openclawps)
 
+> For repo-internal conventions, on-VM runbook, and agent operating rules, see [CLAUDE.md](CLAUDE.md). This README covers architecture and deploy; CLAUDE.md covers day-to-day operation.
+
 ## What this adds to OpenClaw
 
-- **One-command Azure deploy** -- `deploy.sh scratch` goes from zero to a working agent with Telegram, Chrome, and Claude Code in ~10 min. No manual VM setup.
-- **Full graphical desktop** -- Real xfce4 desktop on `:0` with Chrome and VNC. Computer-use agents need a real browser and a real screen, not a headless shell.
-- **Two-layer separation** -- The system (OS, packages, OpenClaw, boot logic) and the claw (identity, workspace, memory, credentials) are on separate disks. The system layer is an immutable, versioned image. The claw layer is a portable data disk you can detach, reattach to a different VM, or move to a new image version. The claw is not the VM -- it rides on top of it.
-- **Stateful upgrades** -- Delete the old VM, create a new one from a new image, reattach the same data disk. The claw picks up where it left off. Migration scripts run automatically.
+- **One-command Azure deploy** -- `terraform apply` in `infra/azure/terraform/fleet/` goes from zero to a working agent with Telegram, Chrome, and Claude Code in ~2 min (after the baseline image is baked once).
+- **Full graphical desktop** -- Real XFCE desktop with RDP, Sunshine/Moonlight streaming, and VNC. Computer-use agents need a real browser and a real screen, not a headless shell.
+- **Three-layer separation** -- **(1)** an immutable baseline image (OS + GPU driver + desktop + remote-access stack, baked by Packer, re-baked rarely), **(2)** an app install layer (Node, OpenClaw, Chrome, Claude Code, Tailscale, runtime payload — installed by cloud-init on every deploy, iterated without re-baking), and **(3)** a portable data disk (identity, workspace, memory, credentials — survives VM replacement). The claw is not the VM; it rides on top of it.
+- **Stateful upgrades** -- Destroy the old VM, create a new one from the current image + re-run cloud-init, reattach the same data disk. The claw picks up where it left off. Migration scripts run automatically.
 - **Fleet-friendly** -- Same image, different `.env`, different claw. Each gets its own Telegram bot, API keys, and workspace.
 - **33-point health checks** -- `verify.sh` runs after every deploy and upgrade. Catches misconfigs before they become mystery failures.
 
 ## Architecture
 
-### Two-layer separation
+### Three-layer separation
 
-The system and the claw are on separate disks. The system is disposable. The claw is portable.
+The system is split into two image layers (baseline + app) plus a portable data disk. The baseline is immutable and expensive to rebuild — so we keep it small and iterate on the app layer instead.
 
 ```mermaid
 graph LR
-    subgraph IMAGE["OS Disk (from image — disposable)"]
-        OS[Ubuntu 24.04 + xfce4]
-        OC[OpenClaw + Chrome + Claude Code]
-        BOOT["/opt/claw/boot.sh"]
-        UNITS[systemd units]
+    subgraph BASELINE["Baseline Image — Packer, bake-once (rarely rebuilt)"]
+        B_OS[Ubuntu + AMD V710 GPU driver]
+        B_DE[XFCE + LightDM + xorg-dummy]
+        B_REM[xrdp + Sunshine]
     end
 
-    subgraph DATA["Data Disk /mnt/claw-data (portable — survives upgrades)"]
-        CONFIG["openclaw/ — config, secrets, exec-approvals"]
+    subgraph APP["App Install — cloud-init, runs every deploy"]
+        A_NODE[Node.js + OpenClaw]
+        A_BROW[Chrome + Claude Code]
+        A_TS[Tailscale]
+        A_PAYLOAD["/opt/claw/ (vm-runtime payload)"]
+    end
+
+    subgraph DATA["Data Disk /mnt/claw-data — portable, survives every upgrade"]
+        CONFIG["openclaw/ — config, .env, exec-approvals"]
         WS["workspace/ — SOUL.md, agents, memory, skills"]
-        STATE["sessions, transcripts, Telegram state"]
-        VNC["vnc-password.txt, update-version.txt"]
+        STATE["lcm.db, sessions, Telegram state"]
+        PW["vnc-password.txt, update-version.txt"]
     end
 
-    BOOT -->|"symlinks"| CONFIG
-    BOOT -->|"symlinks"| WS
+    BASELINE --> APP
+    APP -->|"symlinks"| CONFIG
+    APP -->|"symlinks"| WS
 
-    style IMAGE fill:#1e3a5f,stroke:#3b82f6,color:#e2e8f0
+    style BASELINE fill:#1e3a5f,stroke:#3b82f6,color:#e2e8f0
+    style APP fill:#0a2e1a,stroke:#22c55e,color:#e2e8f0
     style DATA fill:#2d1854,stroke:#a855f7,color:#e2e8f0
 ```
+
+**Why the split matters.** Baking the OS + GPU driver + desktop takes ~30 min on a fresh Azure VM and is fragile (driver signing, kernel pinning). Baking the app layer into the same image would force a 30-minute rebuild for every Node/Chrome/OpenClaw change. Splitting them means a fleet redeploy is ~2 min and we touch Packer only when the OS/GPU/remote-access stack changes. See [CLAUDE.md — The three-layer model](CLAUDE.md#the-three-layer-model-critical-to-internalize) for the decision rule on which layer a change belongs in.
 
 ### Upgrade lifecycle
 
@@ -202,7 +214,7 @@ cp .env.template .env && vi .env
 
 ### What happens at boot
 
-cloud-init writes secrets to `~/.openclaw/.env`. Then `/opt/claw/boot.sh` runs:
+On first deploy, cloud-init installs the app layer (`vm-runtime/install/os/*.sh`) and writes secrets to `/mnt/claw-data/openclaw/.env`. cloud-init does **not** re-run on subsequent `az vm start`s. `/opt/claw/boot.sh` runs on every start:
 
 1. **Mount data disk** at `/mnt/claw-data` (waits up to 60s for Terraform disk attachment)
 2. **Seed defaults** on first boot (config, workspace files, VNC password)
@@ -210,36 +222,46 @@ cloud-init writes secrets to `~/.openclaw/.env`. Then `/opt/claw/boot.sh` runs:
 4. **Fix permissions** and sync VNC password
 5. **Join Tailscale** if auth key is set
 6. **Run update scripts** (`vm-runtime/updates/NNN-*.sh`) version-gated
-7. **Start services** (lightdm, x11vnc, gateway)
+7. **Start services** (lightdm, x11vnc, xrdp, sunshine, openclaw-gateway)
 
-boot.sh is idempotent -- safe to rerun, safe to reboot.
+boot.sh is idempotent -- safe to rerun, safe to reboot. Gateway startup grace is ~11–12s on top of boot.
 
 ## Image lifecycle
 
-**Image** = versioned system runtime (OS, packages, OpenClaw, Chrome, Claude Code, boot logic). **Data disk** = durable agent state (config, secrets, workspace, memory). Migration scripts in `vm-runtime/updates/` run automatically on upgrade.
+- **Baseline image** (`claw-desktop-gpu` in `clawGalleryWest`) = OS + GPU driver + desktop + remote-access stack. Baked by Packer. Rare rebuilds: only when the OS, driver, or remote-protocol layer changes.
+- **App install layer** = Node, OpenClaw, Chrome, Claude Code, Tailscale, vm-runtime payload. Installed by cloud-init on every fleet deploy from `vm-runtime/install/os/*.sh`. Iterate freely — no re-bake required.
+- **Data disk** = durable agent state (config, secrets, workspace, memory). `prevent_destroy = true`. Migration scripts in `vm-runtime/updates/` replay on every start.
 
 ```bash
-# Build from source (Packer)
-cd infra/azure/packer
+# Bake the baseline image (rare; only when OS/GPU/desktop layer changes)
+cd infra/azure/packer/desktop
 packer init .
-packer build -var subscription_id=$(az account show --query id -o tsv) -var image_version=4.0.0 .
+packer build -var subscription_id=$(az account show --query id -o tsv) -var image_version=1.1.0 .
 
-# Or capture from a running VM (shell)
-./bin/deploy.sh bake 4.0.0
+# Redeploy the fleet with a new app layer (common — iteration path)
+cd infra/azure/terraform/fleet
+terraform apply -var-file=terraform.tfvars -var-file=secrets.auto.tfvars
 ```
 
 ## Repository layout
 
-- `bin/deploy.sh` -- canonical operator entrypoint for the current shell-based workflow
-- `infra/azure/shell/` -- Azure CLI implementation of scratch, bake, image, and upgrade
-- `infra/azure/terraform/shared/` -- Terraform root for shared infrastructure (resource group, VNet, NSG, image gallery)
-- `infra/azure/terraform/fleet/` -- Terraform root for claw VMs (per-claw resources driven by fleet manifest)
-- `infra/azure/terraform/modules/` -- reusable Terraform modules (shared-infra, image-gallery, claw-vm)
-- `infra/azure/packer/` -- Packer config and numbered install scripts for reproducible image builds
-- `vm-runtime/` -- the VM payload: cloud-init templates, lifecycle scripts, seeded defaults, and update migrations
-- `fleet/` -- the canonical fleet manifest consumed by Terraform
+- `bin/deploy.sh` -- legacy shell entrypoint (scratch, bake, upgrade); Terraform is the preferred path
+- `infra/azure/shell/` -- Azure CLI implementation backing `bin/deploy.sh`
+- `infra/azure/terraform/baseline/` -- single-VM root for developing the desktop layer and validating Packer inputs (not part of fleet deploy)
+- `infra/azure/terraform/shared/` -- run-once infrastructure: resource group, VNet, NSG, Compute Gallery, image definition
+- `infra/azure/terraform/fleet/` -- per-claw VMs, NICs, public IPs, data disks (driven by `fleet/claws.yaml`)
+- `infra/azure/terraform/modules/` -- reusable modules: `shared-infra`, `image-gallery`, `claw-vm`
+- `infra/azure/packer/desktop/` -- Packer config for the `claw-desktop-gpu` baseline image
+- `vm-runtime/install/desktop/` -- scripts Packer runs at bake time (baseline image only)
+- `vm-runtime/install/os/` -- scripts cloud-init runs at every fleet deploy (app install layer)
+- `vm-runtime/lifecycle/` -- `boot.sh`, `run-updates.sh`, `verify.sh`, `start-claude.sh` staged to `/opt/claw/`
+- `vm-runtime/defaults/` -- seeded onto a fresh data disk on first boot
+- `vm-runtime/updates/NNN-*.sh` -- numbered, version-gated migrations replayed on every start
+- `fleet/claws.yaml` -- canonical fleet manifest consumed by both shared and fleet Terraform roots
 - `.github/workflows/` -- CI/CD: PR validation, image baking, fleet deployment
 - `apps/topology/` -- isolated Vite/React app for the topology and architecture site
+
+See [CLAUDE.md](CLAUDE.md) for the on-VM operational runbook (gateway plugin, `lcm.db`, gateway validator rules, Tailscale Serve, SCP workarounds).
 
 ## CI/CD
 
@@ -271,12 +293,13 @@ The workflows use [workload identity federation](https://learn.microsoft.com/en-
 
 ## Terraform
 
-Two separate Terraform roots under `infra/azure/terraform/`, each with its own state:
+Three separate Terraform roots under `infra/azure/terraform/`, each with its own state:
 
-- **`shared/`** manages infrastructure deployed once: resource group, VNet, subnet, NSG, compute gallery, and image definition. Run this first, then leave it alone.
-- **`fleet/`** manages per-claw resources: public IP, NIC, VM, data disk, and cloud-init. Add or remove claws by editing `fleet/claws.yaml` and re-applying here. Data sources look up the shared infrastructure -- fleet never creates or destroys networking or gallery resources.
+- **`baseline/`** — optional, not part of the fleet path. Stands up a single `baseline-desktop` VM in `rg-linux-gpu-westus` to develop the desktop layer interactively before baking.
+- **`shared/`** — infrastructure deployed once: resource group (`rg-claw-westus`), VNet, subnet, NSG, Compute Gallery (`clawGalleryWest`), and image definition (`claw-desktop-gpu`). Run first, then leave it alone.
+- **`fleet/`** — per-claw resources: public IP, NIC, VM (from the gallery image), data disk, and cloud-init app install. Add or remove claws by editing `fleet/claws.yaml` and re-applying. Data sources look up the shared infrastructure — fleet never creates or destroys networking or gallery resources.
 
-Both roots read `fleet/claws.yaml` for configuration. `bin/deploy.sh` and the shell scripts remain a parallel entrypoint for scratch installs and image baking.
+Both `shared/` and `fleet/` read `fleet/claws.yaml` for configuration. `bin/deploy.sh` and the shell scripts remain a parallel (legacy) entrypoint for scratch installs and image baking.
 
 Validate without configuring remote state:
 
@@ -337,54 +360,80 @@ terraform plan -var-file=terraform.tfvars -var-file=secrets.auto.tfvars
 
 ## Packer
 
-Reproducible image builds under `infra/azure/packer/`. Numbered scripts in `scripts/` replace the monolithic `scratch.yaml` cloud-init install:
+Packer bakes the **baseline image only** — `claw-desktop-gpu` in `clawGalleryWest`, starting from the AMD V710 ROCm marketplace Ubuntu base. Config lives at `infra/azure/packer/desktop/` and calls these scripts from `vm-runtime/install/desktop/`:
 
 | Script | What it installs |
 |---|---|
-| `01-system-packages.sh` | xfce4, lightdm, x11vnc, build tools |
-| `02-desktop-config.sh` | lightdm autologin, xorg dummy, systemd units |
-| `03-nodejs-openclaw.sh` | Node.js 24, OpenClaw |
-| `04-chrome.sh` | Google Chrome (.deb) |
-| `05-claude-code.sh` | Claude Code CLI |
-| `06-tailscale.sh` | Tailscale client |
-| `07-system-setup.sh` | sudoers, service enablement |
-| `99-cleanup.sh` | apt clean, waagent deprovision |
+| `01-system-packages.sh` | xfce4, lightdm, build tools |
+| `03-display-config.sh` | lightdm autologin, xorg dummy, systemd units |
+| `04-xrdp.sh` | xrdp (full desktop over 3389) |
+| `05-sunshine.sh` | Sunshine streaming server (Moonlight-compatible) |
 
-Packer also stages `vm-runtime/` files (boot.sh, run-updates.sh, defaults, updates) into `/opt/claw/` on the image. Two engineers building from the same commit get identical images.
+Everything else — Node.js, OpenClaw, Chrome, Claude Code, Tailscale, the `/opt/claw/` payload — installs at **deploy time** via cloud-init from `vm-runtime/install/os/*.sh`. That's the iteration loop; touching Packer is reserved for OS/GPU/remote-protocol changes.
 
 ## Configuration
 
-Each claw gets its own `.env`:
+Each claw pulls its per-VM secrets from `infra/azure/terraform/fleet/secrets.auto.tfvars` (gitignored; CI gets the same shape via the `CLAW_SECRETS_JSON` GitHub secret). Cloud-init writes them into `/mnt/claw-data/openclaw/.env` on the VM. At least one provider API key must be present for a claw to pass `verify.sh`.
 
 | Key | Required | Notes |
 |---|---|---|
-At least one provider API key must be present for a claw to pass runtime verification.
+| `telegram_bot_token` | yes | Unique per claw — one bot per token |
+| `xai_api_key` | * | Required if using `xai/*` models |
+| `openai_api_key` | * | Required if using `openai/*` models |
+| `anthropic_api_key` | * | Required if using `anthropic/*` models |
+| `moonshot_api_key` | * | Required if using `moonshot/*` models |
+| `deepseek_api_key` | * | Required if using `deepseek/*` models |
+| `brightdata_api_token` | no | Web research |
+| `tailscale_authkey` | no | Auto-joins your tailnet for Tailscale Serve / remote chat-UI access |
 
-| `TELEGRAM_BOT_TOKEN` | yes | Unique per claw -- one bot per token |
-| `OPENCLAW_MODEL` | no | `xai/grok-4`, `openai/gpt-4o`, `anthropic/claude-4`, `moonshot/kimi-k2.5`, `deepseek/deepseek-chat`, etc. Default: `xai/grok-4` |
-| `XAI_API_KEY` | * | Required if using xai/* models |
-| `OPENAI_API_KEY` | * | Required if using openai/* models |
-| `ANTHROPIC_API_KEY` | * | Required if using anthropic/* models |
-| `MOONSHOT_API_KEY` | * | Required if using moonshot/* models |
-| `DEEPSEEK_API_KEY` | * | Required if using deepseek/* models |
-| `BRIGHTDATA_API_TOKEN` | no | Web research |
-| `TELEGRAM_USER_ID` | no | Restricts who can DM the bot |
-| `TAILSCALE_AUTHKEY` | no | Auto-joins your tailnet for remote gateway access |
-| `VM_PASSWORD` | no | Auto-generated if blank. Same password for SSH and VNC. |
+The VM password is **not** a configuration input — Terraform generates one per claw via `random_password.vm_password` and surfaces it at `terraform output -raw -json claw_vm_passwords`. The same password is used for SSH, RDP, VNC, and Sunshine; it's also stored on the data disk at `/mnt/claw-data/vnc-password.txt`.
+
+The default model and `telegram_user_id` are set under `defaults:` / per-claw in `fleet/claws.yaml`. Default model today: `xai/grok-4.20-0309-reasoning`.
 
 ## Connect
 
+The chat UI (OpenClaw gateway, port 18789) is the primary interface to the agent; RDP/Sunshine/VNC give you the graphical desktop. A single per-claw password is shared across SSH, RDP, VNC, and the Sunshine admin UI.
+
 ```bash
-ssh azureuser@<ip>                # SSH key or password from terraform output
-open vnc://<ip>:5900              # same password as SSH
+# Pull the claw's current IP and password from Terraform
+cd infra/azure/terraform/fleet
+IP=$(terraform output -json claw_public_ips | jq -r '.["chad-claw"]')
+PW=$(terraform output -raw -json claw_vm_passwords | jq -r '.["chad-claw"]')
+
+# Chat UI — Tailscale Serve (preferred; requires Serve enabled once at tailnet level)
+open https://chad-claw.tailaef983.ts.net/
+
+# Chat UI — SSH tunnel (zero-config fallback)
+ssh -L 18789:127.0.0.1:18789 azureuser@$IP     # → http://localhost:18789/
+
+# SSH shell
+ssh azureuser@$IP
+
+# RDP (full XFCE desktop)      → $IP:3389       (user: azureuser, pass: $PW)
+# Sunshine / Moonlight         → $IP:47989      (admin UI: https://$IP:47990)
+# VNC (legacy)                 → vnc://$IP:5900 (same password)
 ```
+
+The password is also stored on the data disk at `/mnt/claw-data/vnc-password.txt` (mode 0600).
 
 ## Daily operations
 
 ```bash
-az vm deallocate -g rg-linux-desktop -n my-claw   # stop billing
-az vm start      -g rg-linux-desktop -n my-claw   # resume, services auto-start
+# See what's running across the fleet (resource group is rg-claw-westus)
+az vm list -g rg-claw-westus -d -o table
+
+# Power state for a single claw
+az vm get-instance-view -g rg-claw-westus -n chad-claw \
+  --query "instanceView.statuses[?starts_with(code,'PowerState/')].code | [0]" -o tsv
+
+# Stop billing for the night (keeps disks, static IP, Tailscale identity, lcm.db)
+az vm deallocate -g rg-claw-westus -n chad-claw
+
+# Resume — boot.sh replays idempotently, chat UI comes back ~30–60s later
+az vm start      -g rg-claw-westus -n chad-claw
 ```
+
+`deallocate` pauses compute billing; `stop` does not. Always use `deallocate` to park a claw overnight.
 
 ## Security
 

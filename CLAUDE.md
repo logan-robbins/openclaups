@@ -4,16 +4,23 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this project is
 
-OpenClawps: MLOps-style CI/CD for OpenClaw agent fleets on Azure. The repo builds versioned golden images, deploys VMs from them, and upgrades those VMs without losing per-agent state. Two deployment paths coexist: **Terraform (preferred, declarative fleet state)** and **shell (`bin/deploy.sh`, used for scratch installs and image baking)**.
+OpenClawps: MLOps-style CI/CD for OpenClaw agent fleets on Azure. The repo builds a versioned baseline image, deploys VMs from it, and upgrades those VMs without losing per-agent state. Two deployment paths coexist: **Terraform (preferred, declarative fleet state)** and **shell (`bin/deploy.sh`, used for scratch installs and legacy image baking)**.
 
-## The two-layer model (critical to internalize)
+The canonical fleet manifest is `fleet/claws.yaml`. Today the fleet is a single claw (`chad-claw`) in resource group `rg-claw-westus` on AMD V710 GPU VMs in westus. Both Terraform roots read `claws.yaml` as the source of truth.
 
-Every change should respect the separation:
+## The three-layer model (critical to internalize)
 
-- **Image layer (disposable)**: OS, packages, OpenClaw, Chrome, Claude Code, and everything under `/opt/claw/` (boot logic, update scripts, defaults). Built by Packer or `deploy.sh bake`, versioned in the Azure Compute Gallery. Never carries state.
-- **Data disk (portable)**: `/mnt/claw-data` — per-claw identity, secrets, workspace, memory, Telegram state, VNC password, and `update-version.txt`. Survives VM replacement. `~/.openclaw` and `~/workspace` are bind mounts onto this disk.
+Every change must land in exactly **one** layer. Confusing the layers is the #1 source of breakage. In particular, **do not reach for Packer** when the change belongs in cloud-init — a bake is expensive (~30 min, fresh VM) and the baseline is deliberately kept small and stable.
 
-Upgrades replace the VM from a new image and reattach the same data disk. Any code that writes state must write it under `/mnt/claw-data`; anything the image provides must be reconstructable on every boot.
+1. **Immutable baseline image** — `claw-desktop-gpu` in gallery `clawGalleryWest`, baked by Packer from the AMD V710 marketplace Ubuntu base. Contents: XFCE + LightDM + dummy Xorg + xrdp + Sunshine. That's it. Re-bake **only** when the OS, GPU driver, or remote-desktop/streaming stack changes. Source: `infra/azure/packer/desktop/claw-desktop.pkr.hcl` + `vm-runtime/install/desktop/*.sh`.
+2. **App install layer** — runs at `terraform apply` time on every fleet deploy via the cloud-init template. Installs Node.js + OpenClaw, Chrome, Claude Code, Tailscale, system setup, and OpenClaw services. Also stages the `vm-runtime/` payload into `/opt/claw/`. This is where iteration happens: edit scripts, `terraform apply`, get a new VM in ~2 min, no re-bake. Source: `vm-runtime/install/os/NN-*.sh` invoked from the fleet cloud-init template.
+3. **Data disk** — `/mnt/claw-data`, attached at LUN 0, `prevent_destroy = true`. Holds per-claw identity: secrets (`.env`), workspace, memory (`~/.openclaw` including `lcm.db`), Telegram state, SSH/VNC/RDP/Sunshine password, and `update-version.txt`. `~/.openclaw` and `~/workspace` are bind mounts onto this disk. Survives every VM replacement.
+
+Upgrades destroy the VM, create a new one from the current image + re-run cloud-init, and reattach the same data disk. Anything the first two layers provide must be reconstructable on every boot; anything that must persist lives on the data disk.
+
+**Decision rule**: new package or service → app install layer (cloud-init). Touch the Packer baseline only when the OS, kernel, GPU driver, or desktop/remote-protocol stack changes.
+
+**Baseline bake workflow**: the `infra/azure/terraform/baseline/` root is a separate single-VM root that stands up a `baseline-desktop` VM in `rg-linux-gpu-westus` to validate Packer inputs and develop the desktop layer interactively. It is **not** part of the fleet deploy path and is not referenced by `claws.yaml`. Use `shared/` for the gallery and `fleet/` for claws.
 
 ## Boot and upgrade lifecycle
 
@@ -39,7 +46,7 @@ Shell deploy path (from repo root):
 ./bin/deploy.sh upgrade alice --image 4.0.0
 ```
 
-Terraform (two separate roots, two separate states):
+Terraform (three separate roots, three separate states — `baseline/` for bake-dev, `shared/` for RG+gallery, `fleet/` for the claws):
 
 ```bash
 # Shared (run once): RG, VNet, NSG, Compute Gallery, image definition
@@ -63,12 +70,12 @@ cd infra/azure/terraform/fleet  && terraform init -backend=false && terraform va
 cd infra/azure/packer && packer init . && packer validate .
 ```
 
-Packer image build:
+Packer image build (bakes the **baseline** only — desktop layer on top of the AMD V710 marketplace base):
 
 ```bash
-cd infra/azure/packer
+cd infra/azure/packer/desktop
 packer init .
-packer build -var subscription_id=$(az account show --query id -o tsv) -var image_version=4.0.0 .
+packer build -var subscription_id=$(az account show --query id -o tsv) -var image_version=1.1.0 .
 ```
 
 On a running VM (either via SSH or the deploy/upgrade tail): `/opt/claw/verify.sh` runs the 33+ point health check.
@@ -81,18 +88,86 @@ npm run dev        # vite
 npm run build
 ```
 
+## Fast state check (az cli)
+
+When you walk into a new session and need to know what's running **before** touching any code or Terraform, run these first. Resource group is always `rg-claw-westus` for the fleet.
+
+```bash
+# All claws + power state in one table (running / deallocated / stopped)
+az vm list -g rg-claw-westus -d -o table
+
+# One claw (use this before SSH / before any az vm start|deallocate)
+az vm get-instance-view -g rg-claw-westus -n chad-claw \
+  --query "instanceView.statuses[?starts_with(code,'PowerState/')].code | [0]" -o tsv
+
+# Public IP (static — survives deallocate)
+az vm list-ip-addresses -g rg-claw-westus -n chad-claw -o table
+
+# Data disks (verify prevent_destroy state, confirm nothing is orphaned)
+az disk list -g rg-claw-westus -o table
+
+# Gallery image versions (what's available to deploy from)
+az sig image-version list -g rg-claw-westus \
+  --gallery-name clawGalleryWest --gallery-image-definition claw-desktop-gpu -o table
+```
+
+Stop / resume compute billing without losing state:
+
+```bash
+az vm deallocate -g rg-claw-westus -n chad-claw   # stop billing (keeps disks, IP, identity)
+az vm start      -g rg-claw-westus -n chad-claw   # resume; boot.sh replays idempotently
+```
+
+**`deallocate` vs `stop`**: always use `deallocate` to pause billing. `az vm stop` shuts down the guest OS but the compute is still reserved and billed. A deallocated VM is what the user wants when they say "turn it off for the night."
+
+After `az vm start`, allow ~30–60 s for the chat UI to come back: cloud-init does not re-run (it ran once at creation), but `boot.sh` + `run-updates.sh` replay on every start, then the gateway needs its ~11–12 s startup grace.
+
+## Passwords, keys, and access modes
+
+All access credentials for a claw live in **one** authoritative place: Terraform state on the operator's machine. Per-VM the same password is used for SSH, RDP, VNC, and the Sunshine web UI admin.
+
+```bash
+# Get the password for a claw (from the fleet root)
+cd infra/azure/terraform/fleet
+terraform output -json claw_vm_passwords | jq -r '.["chad-claw"]'
+
+# Map of { claw_name: ip }
+terraform output -json claw_public_ips
+```
+
+On the VM, the password also lives on the data disk at `/mnt/claw-data/vnc-password.txt` (mode 0600, symlinked to `~/vnc-password.txt`). Sunshine's admin password is seeded from this file by `vm-runtime/updates/010-sunshine-config.sh`. Regenerating the password means updating that file **and** re-running the Sunshine seed, not just changing Terraform state.
+
+API keys and the Tailscale auth key come from `infra/azure/terraform/fleet/secrets.auto.tfvars` (gitignored), flow into the VM via cloud-init, and land in `/mnt/claw-data/openclaw/.env`. CI reads the same secrets from the `CLAW_SECRETS_JSON` GitHub secret.
+
+Access modes (in rough order of preference):
+
+| Mode | Port | Notes |
+|---|---|---|
+| **Tailscale Serve → chat UI** | 443 (tailnet) | `https://<magicdns-name>/` — primary way to talk to the agent. Requires Tailscale Serve enabled once at tailnet level (see below). |
+| **SSH tunnel → chat UI** | local 18789 | `ssh -L 18789:127.0.0.1:18789 azureuser@<ip>` → `http://localhost:18789/`. Zero-config fallback when Serve isn't available. |
+| **SSH** | 22 | `ssh azureuser@<ip>` (key auth if your pubkey matches `admin_ssh_public_key`; password also accepted). |
+| **RDP** | 3389 | Microsoft Remote Desktop / FreeRDP. Full XFCE desktop session. |
+| **Sunshine / Moonlight** | 47984–48010 | Low-latency GPU-accelerated streaming. Admin UI: `https://<ip>:47990`. First visit sets / confirms the admin password (seeded from the VNC file). |
+| **VNC** | 5900 | Legacy fallback via x11vnc, same password. |
+
 ## Where things live
 
-- `bin/deploy.sh` — thin wrapper; real implementation is `infra/azure/shell/deploy.sh`.
-- `vm-runtime/` — the VM payload. **Packer stages this into `/opt/claw/` on the image; the shell deploy path uploads it over SSH.** Both entrypoints must stay in sync with this tree.
-  - `cloud-init/` — `scratch.yaml` (full install) and `image.yaml` (slim, for image-based boot).
-  - `lifecycle/` — `boot.sh`, `run-updates.sh`, `verify.sh`, `start-claude.sh`.
+- `bin/deploy.sh` — thin wrapper over `infra/azure/shell/deploy.sh` (legacy scratch/bake/upgrade flow).
+- `vm-runtime/` — the VM payload. Fleet cloud-init runs `install/os/*.sh` at deploy time and stages this tree into `/opt/claw/`; Packer runs `install/desktop/*.sh` at bake time. All three entrypoints (Packer, fleet cloud-init, legacy shell) read from this tree, so keep them consistent.
+  - `install/desktop/` — **baseline image only.** Baked once by Packer: `01-system-packages`, `03-display-config`, `04-xrdp`, `05-sunshine`.
+  - `install/os/` — **every fleet deploy.** Run by cloud-init on each new VM: `01-nodejs-openclaw`, `02-chrome`, `03-claude-code`, `04-tailscale`, `05-system-setup`, `06-openclaw-services`.
+  - `cloud-init/` — cloud-init templates (legacy `scratch.yaml`, slim `image.yaml`). The fleet Terraform module has its own cloud-init template that orchestrates the `install/os/` scripts.
+  - `lifecycle/` — `boot.sh`, `run-updates.sh`, `verify.sh`, `start-claude.sh`. Staged into `/opt/claw/` and invoked on every VM start.
   - `defaults/` — seeded onto a fresh data disk on first boot (config, workspace).
-  - `updates/NNN-*.sh` — numbered, version-gated migrations.
-- `infra/azure/shell/` — Azure CLI implementation for scratch/bake/upgrade.
-- `infra/azure/terraform/{shared,fleet,modules}/` — Terraform roots and shared modules (`claw-vm`, `image-gallery`, `shared-infra`).
-- `infra/azure/packer/` — Packer config plus numbered `scripts/NN-*.sh` install steps (mirrors the scratch cloud-init).
-- `fleet/claws.yaml` — canonical fleet manifest consumed by **both** Terraform roots.
+  - `updates/NNN-*.sh` — numbered, version-gated migrations replayed on every start; advance `update-version.txt` on success.
+- `infra/azure/shell/` — Azure CLI implementation for scratch/bake/upgrade (legacy).
+- `infra/azure/terraform/` — three Terraform roots, three separate states:
+  - `baseline/` — standalone single-VM root (`baseline-desktop` in `rg-linux-gpu-westus`) used for developing the desktop layer interactively before baking. Not part of the fleet path.
+  - `shared/` — run once: RG `rg-claw-westus`, VNet, NSG, Compute Gallery `clawGalleryWest`, image definition `claw-desktop-gpu`.
+  - `fleet/` — day-to-day: per-claw VM, NIC, public IP, data disk, cloud-init app install.
+  - `modules/` — `claw-vm`, `image-gallery`, `shared-infra`.
+- `infra/azure/packer/desktop/` — Packer config for the immutable `claw-desktop-gpu` baseline image.
+- `fleet/claws.yaml` — canonical fleet manifest consumed by both `shared/` and `fleet/` Terraform roots (and by CI).
 - `.github/workflows/` — `validate.yml` (PR checks), `bake-image.yml` (Packer on push to main), `deploy-fleet.yml` (Terraform apply + verify over SSH).
 
 ## Secrets and configuration
@@ -105,8 +180,8 @@ npm run build
 ## Conventions worth respecting
 
 - **Idempotency**: `boot.sh`, `run-updates.sh`, and every `updates/NNN-*.sh` must be safe to rerun. Boot replays them on every start; upgrade replays them on every new VM.
-- **Packer mirrors scratch cloud-init**: the numbered `infra/azure/packer/scripts/` steps exist to produce the same end state as `vm-runtime/cloud-init/scratch.yaml`. Changes to one usually need a matching change in the other.
-- **`fleet/claws.yaml` is the single source of truth for fleet membership** — both Terraform roots read it, and CI deploys from it. Adding a claw = one YAML entry + one secrets entry.
+- **Packer bakes the desktop layer only; cloud-init installs the app layer**: `vm-runtime/install/desktop/*.sh` → Packer (baseline image). `vm-runtime/install/os/*.sh` → cloud-init (every fleet deploy). Do not move installation steps between these directories without thinking about which layer owns them. The legacy `vm-runtime/cloud-init/scratch.yaml` is the historical monolithic path — the fleet path does not use it.
+- **`fleet/claws.yaml` is the single source of truth for fleet membership** — both `shared/` and `fleet/` Terraform roots read it, and CI deploys from it. Adding a claw = one YAML entry + one secrets entry.
 - **Permissive inside the VM is intentional**: passwordless sudo, no exec sandbox. Containment is at the Azure boundary (scoped RG, NSG, credentials). Do not add guest-side hardening without an explicit request — it will break the agent.
 - **Per-VM fields never go in `vm-runtime/defaults/`**: when propagating live `openclaw.json` back to defaults, strip `gateway.auth.token`, every `mcp.servers.*.env.*` token, `exec-approvals.socket.token`, the runtime-written `meta` / `wizard` / `plugins.installs.*` blocks, and per-entry `id` UUIDs on approval lists. MCP servers that need a token should be written at runtime from the per-claw `.env` in a numbered update script — `vm-runtime/updates/005-brightdata-mcp.sh` is the template.
 - **Persist home-dir files via the data disk + a symlink**: anything under `/home/azureuser/` lives on the OS disk and is lost on image upgrade. Put the canonical copy under `/mnt/claw-data/workspace/` (reachable through the existing `~/workspace` bind mount) and create the symlink from `~/` in a numbered update script. `vm-runtime/updates/011-home-claude-md-symlink.sh` shows the idempotent fresh / existing / already-linked / divergent-copy handling.

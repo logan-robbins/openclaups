@@ -50,8 +50,12 @@ Environment=XAUTHORITY=/home/azureuser/.Xauthority
 # PulseAudio runs in the azureuser session; without XDG_RUNTIME_DIR sunshine
 # can't find /run/user/1000/pulse/native → "Couldn't connect to pulseaudio".
 Environment=XDG_RUNTIME_DIR=/run/user/1000
+# Wait until the azureuser XFCE session is actually up — just having the
+# X socket isn't enough; .Xauthority isn't populated until lightdm launches
+# the autologin session. Without this, sunshine starts, fails to attach to
+# :0, and sits idle ("Unable to initialize capture method").
+ExecStartPre=/bin/bash -c 'for _ in $(seq 1 120); do pgrep -u azureuser xfce4-session >/dev/null && exit 0; sleep 1; done; echo "timed out waiting for xfce4-session" >&2; exit 1'
 # Seed per-VM sunshine.conf from the baked default if the user has none.
-ExecStartPre=/bin/bash -c 'until [ -S /tmp/.X11-unix/X0 ]; do sleep 1; done'
 ExecStartPre=/bin/bash -c 'install -d -o azureuser -g azureuser -m 0700 /home/azureuser/.config/sunshine && [ -f /home/azureuser/.config/sunshine/sunshine.conf ] || install -o azureuser -g azureuser -m 0644 /etc/sunshine/default.conf /home/azureuser/.config/sunshine/sunshine.conf'
 ExecStart=/usr/bin/sunshine
 Restart=on-failure
@@ -61,8 +65,9 @@ RestartSec=5
 WantedBy=multi-user.target
 UNIT
 
-# Let azureuser reach the PulseAudio socket for streamed audio.
-usermod -aG pulse-access,audio azureuser || true
+# Let azureuser reach the PulseAudio socket, /dev/uinput (virtual mouse /
+# keyboard / gamepads injected by Sunshine), and /dev/dri/* for VAAPI.
+usermod -aG pulse-access,audio,input azureuser || true
 
 # Sunshine needs CAP_SYS_ADMIN for input injection (uinput) — grant via udev
 cat > /etc/udev/rules.d/85-sunshine-input.rules <<'UDEV'

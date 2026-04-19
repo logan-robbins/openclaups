@@ -50,7 +50,17 @@ if [[ -f "$UNIT" ]] && ! grep -q '^Environment=XDG_RUNTIME_DIR=' "$UNIT"; then
     echo "[update-010] added XDG_RUNTIME_DIR to $UNIT"
 fi
 
-for grp in pulse-access audio; do
+# The default ExecStartPre only waits for the X socket, which exists before
+# lightdm has logged the autologin user in. Swap in a wait for the actual
+# xfce4-session under azureuser — otherwise sunshine attaches to :0 before
+# .Xauthority is populated and fails capture init.
+if [[ -f "$UNIT" ]] && grep -q 'until \[ -S /tmp/.X11-unix/X0 \]' "$UNIT"; then
+    sed -i "s|ExecStartPre=/bin/bash -c 'until \[ -S /tmp/.X11-unix/X0 \]; do sleep 1; done'|ExecStartPre=/bin/bash -c 'for _ in \$(seq 1 120); do pgrep -u azureuser xfce4-session >/dev/null \&\& exit 0; sleep 1; done; echo \"timed out waiting for xfce4-session\" >\&2; exit 1'|" "$UNIT"
+    unit_changed=1
+    echo "[update-010] swapped ExecStartPre to wait on xfce4-session"
+fi
+
+for grp in pulse-access audio input; do
     if getent group "$grp" >/dev/null && ! id -nG "$ADMIN_USER" | tr ' ' '\n' | grep -qx "$grp"; then
         usermod -aG "$grp" "$ADMIN_USER"
         echo "[update-010] added $ADMIN_USER to $grp"

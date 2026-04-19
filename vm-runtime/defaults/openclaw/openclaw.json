@@ -107,6 +107,9 @@
     "auth": {
       "mode": "none"
     },
+    "tailscale": {
+      "mode": "serve"
+    },
     "controlUi": {
       "allowInsecureAuth": true,
       "dangerouslyDisableDeviceAuth": true,
@@ -161,7 +164,7 @@
   },
   "browser": {
     "enabled": true,
-    "executablePath": "/usr/bin/google-chrome-stable",
+    "executablePath": "/usr/local/bin/google-chrome-stable",
     "headless": false,
     "noSandbox": true,
     "ssrfPolicy": {

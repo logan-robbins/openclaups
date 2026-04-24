@@ -66,6 +66,16 @@ for var in TELEGRAM_BOT_TOKEN; do
     fi
 done
 
+discord_enabled=$(jq -r '.channels.discord.enabled // false' /home/azureuser/.openclaw/openclaw.json 2>/dev/null)
+if [[ "$discord_enabled" == "true" ]]; then
+    val=$(grep "^DISCORD_BOT_TOKEN=" "$env_file" 2>/dev/null | cut -d= -f2-)
+    if [[ -n "$val" && "$val" != *"your-"*"-here"* ]]; then
+        pass "DISCORD_BOT_TOKEN is set"
+    else
+        fail "DISCORD_BOT_TOKEN is missing or placeholder while discord is enabled"
+    fi
+fi
+
 # -- Config values --------------------------------------------------------------
 echo "Config values:"
 workspace=$(jq -r '.agents.defaults.workspace // empty' /home/azureuser/.openclaw/openclaw.json 2>/dev/null)

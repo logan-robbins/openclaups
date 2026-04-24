@@ -162,6 +162,7 @@ There are two deployment paths. **Terraform is preferred** -- it produces a decl
 claw_secrets = {
   my-claw = {
     telegram_bot_token   = "from @BotFather"
+    discord_bot_token    = ""
     xai_api_key          = "your key"
     openai_api_key       = ""
     anthropic_api_key    = ""
@@ -169,6 +170,7 @@ claw_secrets = {
     deepseek_api_key     = ""
     brightdata_api_token = ""
     tailscale_authkey    = ""
+    ado_pat              = ""
   }
 }
 ```
@@ -315,6 +317,7 @@ Create a secrets file before planning fleet. Do not commit it:
 claw_secrets = {
   linux-desktop = {
     telegram_bot_token   = "123456789:token"
+    discord_bot_token    = ""
     xai_api_key          = ""
     openai_api_key       = ""
     anthropic_api_key    = ""
@@ -322,6 +325,7 @@ claw_secrets = {
     deepseek_api_key     = ""
     brightdata_api_token = ""
     tailscale_authkey    = ""
+    ado_pat              = ""
   }
 }
 ```
@@ -378,6 +382,7 @@ Each claw pulls its per-VM secrets from `infra/azure/terraform/fleet/secrets.aut
 | Key | Required | Notes |
 |---|---|---|
 | `telegram_bot_token` | yes | Unique per claw — one bot per token |
+| `discord_bot_token` | no | Required when the baseline Discord channel integration is enabled |
 | `xai_api_key` | * | Required if using `xai/*` models |
 | `openai_api_key` | * | Required if using `openai/*` models |
 | `anthropic_api_key` | * | Required if using `anthropic/*` models |
@@ -385,10 +390,11 @@ Each claw pulls its per-VM secrets from `infra/azure/terraform/fleet/secrets.aut
 | `deepseek_api_key` | * | Required if using `deepseek/*` models |
 | `brightdata_api_token` | no | Web research |
 | `tailscale_authkey` | no | Auto-joins your tailnet for Tailscale Serve / remote chat-UI access |
+| `ado_pat` | no | Azure DevOps access for repos or APIs the claw needs |
 
 The VM password is **not** a configuration input — Terraform generates one per claw via `random_password.vm_password` and surfaces it at `terraform output -raw -json claw_vm_passwords`. The same password is used for SSH, RDP, and Sunshine; it's also stored on the data disk at `/mnt/claw-data/vnc-password.txt` (kept under the `vnc-` name for backwards compatibility; Sunshine's admin password is seeded from it).
 
-The default model and `telegram_user_id` are set under `defaults:` / per-claw in `fleet/claws.yaml`. Default model today: `xai/grok-4.20-0309-reasoning`.
+The default model and `telegram_user_id` are set under `defaults:` / per-claw in `fleet/claws.yaml`. Default model today: `xai/grok-4-1-fast-non-reasoning`.
 
 ## Connect
 

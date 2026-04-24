@@ -63,6 +63,7 @@ module "claw_vm" {
   cloud_init_template_path = local.cloud_init_template
   openclaw_model           = each.value.model
   telegram_bot_token       = each.value.secrets.telegram_bot_token
+  discord_bot_token        = try(each.value.secrets.discord_bot_token, "")
   telegram_user_id         = try(each.value.telegram_user_id, "")
   xai_api_key              = each.value.secrets.xai_api_key
   openai_api_key           = each.value.secrets.openai_api_key
@@ -72,6 +73,7 @@ module "claw_vm" {
   brightdata_api_token     = each.value.secrets.brightdata_api_token
   tailscale_authkey        = each.value.secrets.tailscale_authkey
   relay_token              = try(each.value.secrets.relay_token, "")
+  ado_pat                  = try(each.value.secrets.ado_pat, "")
   admin_ssh_public_key     = var.admin_ssh_public_key
   enable_trusted_launch    = try(each.value.enable_trusted_launch, true)
   tags                     = merge(local.shared_tags, try(each.value.tags, {}), { claw = each.key })

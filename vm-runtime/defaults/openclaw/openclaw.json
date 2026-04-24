@@ -2,7 +2,7 @@
   "agents": {
     "defaults": {
       "model": {
-        "primary": "anthropic/claude-sonnet-4-6"
+        "primary": "xai/grok-4-1-fast-non-reasoning"
       },
       "workspace": "/mnt/claw-data/workspace",
       "sandbox": {
@@ -78,6 +78,9 @@
         },
         "xai/grok-4.20-0309-reasoning": {
           "alias": "grok-reasoning"
+        },
+        "xai/grok-4-1-fast-non-reasoning": {
+          "alias": "grok-fast"
         }
       },
       "compaction": {
@@ -90,7 +93,104 @@
     "list": [
       {
         "id": "main",
-        "default": true
+        "default": true,
+        "model": "xai/grok-4-1-fast-non-reasoning"
+      },
+      {
+        "id": "orchestrator",
+        "name": "Orchestrator",
+        "model": "anthropic/claude-opus-4-7",
+        "thinkingDefault": "adaptive",
+        "params": {
+          "effort": "xhigh",
+          "max_tokens": 64000,
+          "task_budget": 100000,
+          "cacheRetention": "short"
+        }
+      },
+      {
+        "id": "browser-dom",
+        "name": "Browser DOM",
+        "model": "anthropic/claude-sonnet-4-6",
+        "thinkingDefault": "adaptive",
+        "params": {
+          "effort": "medium",
+          "max_tokens": 16000,
+          "cacheRetention": "short"
+        }
+      },
+      {
+        "id": "browser-visual",
+        "name": "Browser Visual",
+        "model": "openai/gpt-5.4",
+        "params": {
+          "reasoning": {
+            "effort": "medium"
+          },
+          "text": {
+            "verbosity": "low"
+          }
+        }
+      },
+      {
+        "id": "research",
+        "name": "Research",
+        "model": "moonshot/kimi-k2.6",
+        "params": {
+          "thinking": {
+            "type": "enabled",
+            "keep": "all"
+          },
+          "temperature": 1,
+          "max_tokens": 32000
+        }
+      },
+      {
+        "id": "code",
+        "name": "Code",
+        "model": "moonshot/kimi-k2.6",
+        "params": {
+          "thinking": {
+            "type": "enabled",
+            "keep": "all"
+          },
+          "temperature": 1,
+          "max_tokens": 32000
+        }
+      },
+      {
+        "id": "terminal",
+        "name": "Terminal",
+        "model": "openai/gpt-5.4",
+        "params": {
+          "reasoning": {
+            "effort": "high"
+          },
+          "text": {
+            "verbosity": "low"
+          }
+        }
+      },
+      {
+        "id": "extract",
+        "name": "Extract",
+        "model": "deepseek/deepseek-reasoner",
+        "params": {
+          "temperature": 0.2,
+          "max_tokens": 4000
+        }
+      },
+      {
+        "id": "judge",
+        "name": "Judge",
+        "model": "anthropic/claude-opus-4-7",
+        "thinkingDefault": "adaptive",
+        "params": {
+          "effort": "high",
+          "max_tokens": 32000,
+          "task_budget": 40000,
+          "cacheRetention": "short"
+        }
       }
     ]
   },
@@ -187,6 +287,29 @@
     }
   },
   "channels": {
+    "discord": {
+      "enabled": true,
+      "token": {
+        "source": "env",
+        "provider": "default",
+        "id": "DISCORD_BOT_TOKEN"
+      },
+      "dmPolicy": "pairing",
+      "groupPolicy": "allowlist",
+      "guilds": {
+        "1497091347201658880": {
+          "requireMention": false,
+          "users": [
+            "1366100867480293580"
+          ],
+          "channels": {
+            "1497095994985418762": {
+              "enabled": true
+            }
+          }
+        }
+      }
+    },
     "telegram": {
       "enabled": true,
       "dmPolicy": "open",
@@ -211,7 +334,9 @@
         "enabled": true,
         "config": {
           "permissionMode": "approve-all",
-          "timeoutSeconds": 3600
+          "timeoutSeconds": 3600,
+          "nonInteractivePermissions": "fail",
+          "queueOwnerTtlSeconds": 60
         }
       },
       "lossless-claw": {
@@ -437,6 +562,21 @@
           }
         ]
       }
+    }
+  },
+  "acp": {
+    "enabled": true,
+    "dispatch": {
+      "enabled": true
+    },
+    "backend": "acpx",
+    "allowedAgents": [
+      "claude",
+      "codex"
+    ],
+    "maxConcurrentSessions": 8,
+    "runtime": {
+      "ttlMinutes": 120
     }
   }
 }

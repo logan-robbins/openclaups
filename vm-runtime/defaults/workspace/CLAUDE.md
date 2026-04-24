@@ -40,7 +40,7 @@ The openclaups source repo (the system that built and manages this VM) is at:
 
 | Path | Purpose |
 |---|---|
-| `/mnt/claw-data/openclaw/.env` | Secrets (API keys, Telegram token, Gmail password, GitHub PAT, KEYRING_PASSWORD) |
+| `/mnt/claw-data/openclaw/.env` | Secrets (API keys, Telegram/Discord tokens, ADO PAT, Gmail password, GitHub PAT, KEYRING_PASSWORD) |
 | `/mnt/claw-data/openclaw/openclaw.json` | Main config (model, plugins, tools, MCP servers, loop detection) |
 | `/mnt/claw-data/openclaw/agents/main/sessions/sessions.json` | Conversation sessions |
 | `/mnt/claw-data/openclaw/memory/main.sqlite` | Built-in memory store |
@@ -162,7 +162,7 @@ cd ~/workspace && npx clawhub install <slug>
 - **Gmail/gog broken after VM upgrade**: re-run the OAuth flow per `docs/GMAIL.md` in the openclaups repo
 - **Data disk not mounted**: check `/var/log/claw-boot.log` — boot.sh has a 60s retry loop for disk attachment
 - **Config broken (bad JSON)**: `python3 -m json.tool ~/.openclaw/openclaw.json` to validate before restarting
-- **"This model does not support assistant message prefill" on every message**: Two causes work together. (1) `thinkingDefault: "high"` with `claude-sonnet-4-6` triggers an API pathway the model rejects — fix by setting `thinkingDefault: "adaptive"` in `openclaw.json`. (2) Each rejection writes an empty `role=assistant, content=[]` entry to the JSONL session file, perpetuating the loop — stop gateway, remove those entries, reset LCM bootstrap state (`UPDATE conversation_bootstrap_state SET last_seen_size=0, last_seen_mtime_ms=0, last_processed_offset=0, last_processed_entry_hash=NULL WHERE conversation_id=N`), restart. See memory `openclaw_prefill_loop_fix.md`. Upstream: openclaw/openclaw#58567.
+- **"This model does not support assistant message prefill" on every message**: This is usually a model/config mismatch, not a gateway bug. If `claude-sonnet-4-6` is assigned to an agent with aggressive reasoning defaults, switch that agent to `thinkingDefault: "adaptive"` or move the role to a different model, then remove the bad empty `role=assistant, content=[]` entries from the affected session JSONL and reset the LCM bootstrap state (`UPDATE conversation_bootstrap_state SET last_seen_size=0, last_seen_mtime_ms=0, last_processed_offset=0, last_processed_entry_hash=NULL WHERE conversation_id=N`). See memory `openclaw_prefill_loop_fix.md`. Upstream: openclaw/openclaw#58567.
 
 ## Git repo
 
@@ -189,15 +189,15 @@ Config file: `~/.openclaw/openclaw.json` (→ `/mnt/claw-data/openclaw/openclaw.
 
 | Field | This deployment | Notes |
 |---|---|---|
-| `model.primary` | `anthropic/claude-sonnet-4-6` | Main model |
+| `model.primary` | `xai/grok-4-1-fast-non-reasoning` | Default `main` agent model |
 | `workspace` | `/mnt/claw-data/workspace` | Agent working directory |
 | `maxConcurrent` | `32` | Parallel runs |
 | `sandbox.mode` | `off` | No sandboxing |
 | `elevatedDefault` | `full` | Full host access |
-| `thinkingDefault` | `high` | Extended reasoning on by default |
 | `contextPruning.mode` | `cache-ttl` with `ttl: 1h` | Prune stale cache entries after 1 hour |
 | `heartbeat.every` | `30m` | Periodic heartbeat run every 30 min |
 | `compaction.mode` | `safeguard` | Compact context when it grows large |
+| `skills` | `["/mnt/claw-data/workspace/skills"]` | Workspace skill directory loaded for all agents |
 
 #### `agents.defaults.subagents` — sub-agent spawning policy
 
@@ -223,6 +223,10 @@ web: { search: { enabled: true }, fetch: { enabled: true } }
 { port: 18789, mode: "local", bind: "loopback", auth: { mode: "token" } }
 ```
 
+Channel summary:
+- Discord is enabled with env-sourced bot auth, DM pairing, and an allowlisted guild/channel map.
+- Telegram is enabled in open mode for both DMs and groups, with partial streaming replies.
+
 Operator scopes:
 - `operator.admin` — agents create/update/delete, sessions patch/reset/delete, cron management
 - `operator.write` — send, sessions create/send/steer/abort, chat
@@ -230,7 +234,7 @@ Operator scopes:
 - `operator.approvals` — exec approval workflow
 - `operator.pairing` — node pair/device management
 
-The CLI token carries all scopes. Gateway auth token is in `~/.openclaw/.env`.
+The CLI token carries all scopes. The live gateway auth token is stored in `~/.openclaw/openclaw.json` on the persistent disk and is intentionally not vendored into this repo.
 
 ### Useful CLI commands
 

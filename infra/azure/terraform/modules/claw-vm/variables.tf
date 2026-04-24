@@ -67,6 +67,12 @@ variable "telegram_bot_token" {
   sensitive = true
 }
 
+variable "discord_bot_token" {
+  type      = string
+  sensitive = true
+  default   = ""
+}
+
 variable "telegram_user_id" {
   type    = string
   default = ""
@@ -115,6 +121,12 @@ variable "tailscale_authkey" {
 }
 
 variable "relay_token" {
+  type      = string
+  sensitive = true
+  default   = ""
+}
+
+variable "ado_pat" {
   type      = string
   sensitive = true
   default   = ""

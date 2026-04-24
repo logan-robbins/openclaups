@@ -6,7 +6,7 @@ This file documents what is specific to this claw VM. Skills define how tools wo
 
 - Display: X11 on `:0`, xfce4 session
 - VNC: port 5900, password in `~/vnc-password.txt`
-- Browser: Chrome at `/usr/bin/google-chrome-stable` (no sandbox, not headless)
+- Browser: Chrome at `/usr/local/bin/google-chrome-stable` (sandboxed, not headless)
 
 ## Workspace Paths
 
@@ -31,9 +31,9 @@ There is no config knob to extend this list (GitHub issue openclaw#22237, closed
 
 ## Models
 
-- **Primary:** Grok 4.20 reasoning (`xai/grok-4.20-0309-reasoning`)
-- **Fallback:** Grok 4 (`xai/grok-4`)
-- **Additional:** Kimi K2.5 (`moonshot/kimi-k2.5`), DeepSeek V3 (`deepseek/deepseek-chat`), DeepSeek R1 (`deepseek/deepseek-reasoner`)
+- **Primary:** Grok 4.1 Fast (`xai/grok-4-1-fast-non-reasoning`)
+- **Agent roster:** `orchestrator` = Opus 4.7, `browser-dom` = Sonnet 4.6, `browser-visual` = GPT-5.4, `research`/`code` = Kimi K2.6, `terminal` = GPT-5.4, `extract` = DeepSeek R1, `judge` = Opus 4.7
+- **Additional providers:** GPT-5.4 / Mini / Nano / Codex, o1, Kimi K2.6 / K2 Thinking, Grok 4.20 / 4.20 Reasoning, DeepSeek Chat / Reasoner, Claude Sonnet 4.6 / Opus 4.7 / Haiku 4.5
 
 ## Networking
 
@@ -42,7 +42,8 @@ There is no config knob to extend this list (GitHub issue openclaw#22237, closed
 
 ## Channel
 
-- Telegram DM only (group policy disabled, streaming partial)
+- Discord enabled (`pairing` DMs, allowlisted guild/channel routing)
+- Telegram enabled (`open` DMs and groups, streaming partial)
 
 ## Exec
 

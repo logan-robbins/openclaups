@@ -19,6 +19,7 @@ variable "claw_secrets" {
   description = "Sensitive per-claw secrets keyed by claw name."
   type = map(object({
     telegram_bot_token   = string
+    discord_bot_token    = optional(string, "")
     xai_api_key          = optional(string, "")
     openai_api_key       = optional(string, "")
     anthropic_api_key    = optional(string, "")
@@ -27,6 +28,7 @@ variable "claw_secrets" {
     brightdata_api_token = optional(string, "")
     tailscale_authkey    = optional(string, "")
     relay_token          = optional(string, "")
+    ado_pat              = optional(string, "")
   }))
   sensitive = true
   default   = {}

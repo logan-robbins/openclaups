@@ -6,6 +6,7 @@ locals {
   shared_tags         = merge(try(local.azure.tags, {}), var.resource_tags)
   empty_secret_template = {
     telegram_bot_token   = ""
+    discord_bot_token    = ""
     xai_api_key          = ""
     openai_api_key       = ""
     anthropic_api_key    = ""
@@ -14,6 +15,7 @@ locals {
     brightdata_api_token = ""
     tailscale_authkey    = ""
     relay_token          = ""
+    ado_pat              = ""
   }
 
   claws = {

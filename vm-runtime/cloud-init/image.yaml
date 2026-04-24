@@ -26,10 +26,12 @@ write_files:
       DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY}
       BRIGHTDATA_API_TOKEN=${BRIGHTDATA_API_TOKEN}
       TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      DISCORD_BOT_TOKEN=${DISCORD_BOT_TOKEN}
       TELEGRAM_USER_ID=${TELEGRAM_USER_ID}
       VM_PASSWORD=${VM_PASSWORD}
       TAILSCALE_AUTHKEY=${TAILSCALE_AUTHKEY}
       RELAY_TOKEN=${RELAY_TOKEN}
+      ADO_PAT=${ADO_PAT}
 
   # First-boot install runner: clone repo, run desktop + os scripts, stage
   # vm-runtime payload into /opt/claw/, then trigger boot.sh.

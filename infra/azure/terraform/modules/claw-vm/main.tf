@@ -8,10 +8,12 @@ locals {
     DEEPSEEK_API_KEY     = var.deepseek_api_key
     BRIGHTDATA_API_TOKEN = var.brightdata_api_token
     TELEGRAM_BOT_TOKEN   = var.telegram_bot_token
+    DISCORD_BOT_TOKEN    = var.discord_bot_token
     TELEGRAM_USER_ID     = var.telegram_user_id
     VM_PASSWORD          = var.admin_password
     TAILSCALE_AUTHKEY    = var.tailscale_authkey
     RELAY_TOKEN          = var.relay_token
+    ADO_PAT              = var.ado_pat
   })
 }
 
